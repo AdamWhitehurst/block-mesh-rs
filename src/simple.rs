@@ -1,11 +1,12 @@
 use crate::{
-    bounds::assert_in_bounds, IdentityVoxel, OrientedBlockFace, UnitQuadBuffer, UnorientedUnitQuad, Voxel, VoxelVisibility,
+    bounds::assert_in_bounds, IdentityVoxel, OrientedBlockFace, UnitQuadBuffer, UnorientedUnitQuad,
+    Voxel, VoxelVisibility,
 };
 
-use ilattice::glam::UVec3;
-use ilattice::prelude::Extent;
-use ndshape::Shape;
+use glam::{IVec3, UVec3};
 
+use crate::extent::Extent;
+use ndshape::Shape;
 
 /// A fast and simple meshing algorithm that produces a single quad for every visible face of a block.
 ///
@@ -50,7 +51,7 @@ pub fn visible_block_faces_with_voxel_view<'a, T, V, S>(
 
     let min = UVec3::from(min).as_ivec3();
     let max = UVec3::from(max).as_ivec3();
-    let extent = Extent::from_min_and_max(min, max);
+    let extent = Extent::<IVec3>::from_min_and_max(min, max);
     let interior = extent.padded(-1); // Avoid accessing out of bounds with a 3x3x3 kernel.
     let interior =
         Extent::from_min_and_shape(interior.minimum.as_uvec3(), interior.shape.as_uvec3());
@@ -139,5 +140,4 @@ mod tests {
             }
         }
     }
-
 }

@@ -79,6 +79,7 @@
 
 mod bounds;
 mod buffer;
+pub mod extent;
 pub mod geometry;
 mod greedy;
 mod simple;
@@ -89,7 +90,6 @@ pub use geometry::*;
 pub use greedy::*;
 pub use simple::*;
 
-pub use ilattice;
 pub use ndshape;
 
 /// Describes how this voxel influences mesh generation.

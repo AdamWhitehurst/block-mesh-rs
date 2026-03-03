@@ -1,0 +1,270 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 4cf7b94..e9a9fd4 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -8,6 +8,6 @@ edition = "2021"
+ license = "MIT OR Apache-2.0"
+ 
+ [dependencies]
+-ilattice = "0.1"
++glam = "0.30"
+ ndshape = "0.3"
+ ndcopy = "0.3"
+diff --git a/src/bounds.rs b/src/bounds.rs
+index 61d5cfa..7eb27db 100644
+--- a/src/bounds.rs
++++ b/src/bounds.rs
+@@ -1,5 +1,6 @@
+-use ilattice::glam::UVec3;
+-use ilattice::prelude::Extent;
++use glam::UVec3;
++
++use crate::extent::Extent;
+ use ndshape::Shape;
+ 
+ pub fn assert_in_bounds<T, S>(voxels: &[T], voxels_shape: &S, min: [u32; 3], max: [u32; 3])
+@@ -17,7 +18,7 @@ where
+     local_extent
+         .check_positive_shape()
+         .unwrap_or_else(|| panic!("Invalid shape={shape:?}"));
+-    let query_extent = Extent::from_min_and_max(UVec3::from(min), UVec3::from(max));
++    let query_extent = Extent::<UVec3>::from_min_and_max(UVec3::from(min), UVec3::from(max));
+     query_extent.check_positive_shape().unwrap_or_else(|| {
+         panic!("Invalid extent min={min:?} max={max:?}; has non-positive shape")
+     });
+diff --git a/src/extent.rs b/src/extent.rs
+new file mode 100644
+index 0000000..08c0b65
+--- /dev/null
++++ b/src/extent.rs
+@@ -0,0 +1,106 @@
++use std::ops::Add;
++
++use glam::{IVec3, UVec3};
++
++/// Axis-aligned extent over a half-open integer interval `[minimum, minimum + shape)`.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Extent<V> {
++    /// The least point contained in the extent.
++    pub minimum: V,
++    /// The length of each dimension.
++    pub shape: V,
++}
++
++impl<V> Extent<V> {
++    #[inline]
++    pub const fn from_min_and_shape(minimum: V, shape: V) -> Self {
++        Self { minimum, shape }
++    }
++}
++
++impl Extent<IVec3> {
++    /// Construct from inclusive min and max corners.
++    /// Shape = max - min + 1.
++    #[inline]
++    pub fn from_min_and_max(min: IVec3, max: IVec3) -> Self {
++        Self {
++            minimum: min,
++            shape: max - min + IVec3::ONE,
++        }
++    }
++
++    /// Grow (positive) or shrink (negative) the extent by `amount` on each side.
++    #[inline]
++    pub fn padded(&self, amount: i32) -> Self {
++        Self {
++            minimum: self.minimum - IVec3::splat(amount),
++            shape: self.shape + IVec3::splat(amount + amount),
++        }
++    }
++}
++
++impl Extent<UVec3> {
++    /// Construct from inclusive min and max corners.
++    /// Shape = max - min + 1.
++    #[inline]
++    pub fn from_min_and_max(min: UVec3, max: UVec3) -> Self {
++        Self {
++            minimum: min,
++            shape: max - min + UVec3::ONE,
++        }
++    }
++
++    /// Returns `Some(())` if all shape components are positive (> 0).
++    #[inline]
++    pub fn check_positive_shape(&self) -> Option<()> {
++        let s = self.shape;
++        (s.x > 0 && s.y > 0 && s.z > 0).then_some(())
++    }
++
++    /// Returns `true` if `self` is fully contained within `other`.
++    #[inline]
++    pub fn is_subset_of(&self, other: &Self) -> bool {
++        let self_min = self.minimum;
++        let self_lub = self.least_upper_bound();
++        let other_min = other.minimum;
++        let other_lub = other.least_upper_bound();
++
++        self_min.cmpge(other_min).all() && self_lub.cmple(other_lub).all()
++    }
++
++    /// The exclusive upper bound: `minimum + shape`.
++    #[inline]
++    pub fn least_upper_bound(&self) -> UVec3 {
++        self.minimum + self.shape
++    }
++
++    /// Iterate over all `UVec3` points in `[minimum, minimum + shape)`.
++    /// Order: z outermost, then y, then x innermost.
++    #[inline]
++    pub fn iter3(&self) -> impl Iterator<Item = UVec3> {
++        let min = self.minimum;
++        let lub = self.least_upper_bound();
++        let z_range = min.z..lub.z;
++        let y_range = min.y..lub.y;
++        let x_range = min.x..lub.x;
++
++        z_range.flat_map(move |z| {
++            let x_range = x_range.clone();
++            y_range
++                .clone()
++                .flat_map(move |y| x_range.clone().map(move |x| UVec3::new(x, y, z)))
++        })
++    }
++}
++
++impl Add<UVec3> for Extent<UVec3> {
++    type Output = Self;
++
++    #[inline]
++    fn add(self, rhs: UVec3) -> Self::Output {
++        Self {
++            minimum: self.minimum + rhs,
++            shape: self.shape,
++        }
++    }
++}
+diff --git a/src/geometry/axis.rs b/src/geometry/axis.rs
+index 7ea3935..ab62f59 100644
+--- a/src/geometry/axis.rs
++++ b/src/geometry/axis.rs
+@@ -1,4 +1,4 @@
+-use ilattice::glam::{IVec3, UVec3};
++use glam::{IVec3, UVec3};
+ 
+ /// Either the X, Y, or Z axis.
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+diff --git a/src/geometry/face.rs b/src/geometry/face.rs
+index 7fab3a2..a06a9ed 100644
+--- a/src/geometry/face.rs
++++ b/src/geometry/face.rs
+@@ -1,6 +1,6 @@
+ use crate::{Axis, AxisPermutation, SignedAxis, UnorientedQuad};
+ 
+-use ilattice::glam::{IVec3, UVec3};
++use glam::{IVec3, UVec3};
+ 
+ /// Metadata that's used to aid in the geometric calculations for one of the 6 possible cube faces.
+ #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+@@ -39,12 +39,12 @@ impl OrientedBlockFace {
+             AxisPermutation::even_with_normal_axis(normal.unsigned_axis()),
+         )
+     }
+-    
++
+     #[inline]
+     pub fn n_sign(&self) -> i32 {
+         self.n_sign
+     }
+-    
++
+     #[inline]
+     pub fn permutation(&self) -> AxisPermutation {
+         self.permutation
+diff --git a/src/greedy.rs b/src/greedy.rs
+index 5d8a6d4..2bbba8e 100644
+--- a/src/greedy.rs
++++ b/src/greedy.rs
+@@ -2,10 +2,13 @@ mod merge_strategy;
+ 
+ pub use merge_strategy::*;
+ 
+-use crate::{bounds::assert_in_bounds, OrientedBlockFace, QuadBuffer, UnorientedQuad, Voxel, VoxelVisibility};
++use crate::{
++    bounds::assert_in_bounds, OrientedBlockFace, QuadBuffer, UnorientedQuad, Voxel, VoxelVisibility,
++};
+ 
+-use ilattice::glam::UVec3;
+-use ilattice::prelude::Extent;
++use glam::{IVec3, UVec3};
++
++use crate::extent::Extent;
+ use ndcopy::fill3;
+ use ndshape::Shape;
+ 
+@@ -96,7 +99,7 @@ pub fn greedy_quads_with_merge_strategy<T, S, Merger>(
+ 
+     let min = UVec3::from(min).as_ivec3();
+     let max = UVec3::from(max).as_ivec3();
+-    let extent = Extent::from_min_and_max(min, max);
++    let extent = Extent::<IVec3>::from_min_and_max(min, max);
+ 
+     output.reset(voxels.len());
+     let GreedyQuadsBuffer {
+diff --git a/src/lib.rs b/src/lib.rs
+index 6e98cd4..ea842b9 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -79,6 +79,7 @@
+ 
+ mod bounds;
+ mod buffer;
++pub mod extent;
+ pub mod geometry;
+ mod greedy;
+ mod simple;
+@@ -89,7 +90,6 @@ pub use geometry::*;
+ pub use greedy::*;
+ pub use simple::*;
+ 
+-pub use ilattice;
+ pub use ndshape;
+ 
+ /// Describes how this voxel influences mesh generation.
+diff --git a/src/simple.rs b/src/simple.rs
+index b9927eb..dbf6052 100644
+--- a/src/simple.rs
++++ b/src/simple.rs
+@@ -1,11 +1,12 @@
+ use crate::{
+-    bounds::assert_in_bounds, IdentityVoxel, OrientedBlockFace, UnitQuadBuffer, UnorientedUnitQuad, Voxel, VoxelVisibility,
++    bounds::assert_in_bounds, IdentityVoxel, OrientedBlockFace, UnitQuadBuffer, UnorientedUnitQuad,
++    Voxel, VoxelVisibility,
+ };
+ 
+-use ilattice::glam::UVec3;
+-use ilattice::prelude::Extent;
+-use ndshape::Shape;
++use glam::{IVec3, UVec3};
+ 
++use crate::extent::Extent;
++use ndshape::Shape;
+ 
+ /// A fast and simple meshing algorithm that produces a single quad for every visible face of a block.
+ ///
+@@ -50,7 +51,7 @@ pub fn visible_block_faces_with_voxel_view<'a, T, V, S>(
+ 
+     let min = UVec3::from(min).as_ivec3();
+     let max = UVec3::from(max).as_ivec3();
+-    let extent = Extent::from_min_and_max(min, max);
++    let extent = Extent::<IVec3>::from_min_and_max(min, max);
+     let interior = extent.padded(-1); // Avoid accessing out of bounds with a 3x3x3 kernel.
+     let interior =
+         Extent::from_min_and_shape(interior.minimum.as_uvec3(), interior.shape.as_uvec3());
+@@ -139,5 +140,4 @@ mod tests {
+             }
+         }
+     }
+-
+ }
+

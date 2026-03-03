@@ -2,10 +2,13 @@ mod merge_strategy;
 
 pub use merge_strategy::*;
 
-use crate::{bounds::assert_in_bounds, OrientedBlockFace, QuadBuffer, UnorientedQuad, Voxel, VoxelVisibility};
+use crate::{
+    bounds::assert_in_bounds, OrientedBlockFace, QuadBuffer, UnorientedQuad, Voxel, VoxelVisibility,
+};
 
-use ilattice::glam::UVec3;
-use ilattice::prelude::Extent;
+use glam::{IVec3, UVec3};
+
+use crate::extent::Extent;
 use ndcopy::fill3;
 use ndshape::Shape;
 
@@ -96,7 +99,7 @@ pub fn greedy_quads_with_merge_strategy<T, S, Merger>(
 
     let min = UVec3::from(min).as_ivec3();
     let max = UVec3::from(max).as_ivec3();
-    let extent = Extent::from_min_and_max(min, max);
+    let extent = Extent::<IVec3>::from_min_and_max(min, max);
 
     output.reset(voxels.len());
     let GreedyQuadsBuffer {

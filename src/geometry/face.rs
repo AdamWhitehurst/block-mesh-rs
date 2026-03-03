@@ -1,6 +1,6 @@
 use crate::{Axis, AxisPermutation, SignedAxis, UnorientedQuad};
 
-use ilattice::glam::{IVec3, UVec3};
+use glam::{IVec3, UVec3};
 
 /// Metadata that's used to aid in the geometric calculations for one of the 6 possible cube faces.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,12 +39,12 @@ impl OrientedBlockFace {
             AxisPermutation::even_with_normal_axis(normal.unsigned_axis()),
         )
     }
-    
+
     #[inline]
     pub fn n_sign(&self) -> i32 {
         self.n_sign
     }
-    
+
     #[inline]
     pub fn permutation(&self) -> AxisPermutation {
         self.permutation
